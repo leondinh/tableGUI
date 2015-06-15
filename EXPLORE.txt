@@ -1,0 +1,8 @@
+GITHUB
+https://windows.github.com/
+https://help.github.com/articles/deleting-a-repository/
+
+PANDAS
+http://pandas.pydata.org/pandas-docs/stable/dsintro.html
+http://stackoverflow.com/questions/13842088/set-value-for-particular-cell-in-pandas-dataframe
+
