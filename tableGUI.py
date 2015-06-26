@@ -3,7 +3,8 @@ from pandas import *
 from PyQt4.QtGui import *
 import PyQt4.QtCore as QtCore
 
-df = read_csv("test.csv")
+df = read_csv("test.csv", na_values=["hello","world","blah"])
+df_s_notnas = None
 def __baseView(dataframe, editOnly_list=None, addRows_flag=False, nonEditableEnabled_flag=True):
 	# Create an PyQT4 application object.
 	app 		= QApplication(sys.argv)
@@ -15,18 +16,49 @@ def __baseView(dataframe, editOnly_list=None, addRows_flag=False, nonEditableEna
 	# Create window w/ table
 	datatable = QTableWidget()
 
-	if addRows_flag:	
-		# Create add row button
-		addRowButton = QPushButton('add row')
+	def handleAddRowButton():
+                datatable.insertRow(datatable.rowCount())
 
-		# Create handler
-		def handleAddRowButton():
-			datatable.insertRow(datatable.rowCount())
+        def sortAscending():
+                nameExists = False
+                columnName, boolVal = QInputDialog.getText(datatable, 'Sort', 'Column name:')
+                if boolVal:
+                        for i in range(datatable.columnCount()):
+                                if datatable.horizontalHeaderItem(i).text() == columnName:
+                                        datatable.sortItems(i, 0)
+                                        nameExists = True
+                if nameExists == False:
+                        print "Error: Bad column name!"
+                return
+        
+        def sortDescending():
+                nameExists = False
+                columnName, boolVal = QInputDialog.getText(datatable, 'Sort', 'Column name:')
+                if boolVal:
+                        for i in range(datatable.columnCount()):
+                                if datatable.horizontalHeaderItem(i).text() == columnName:
+                                        datatable.sortItems(i, 1)
+                                        nameExists = True
+                if nameExists == False:
+                        print "Error: Bad column name!"
+                return
 
-		# Connect to handler
-		addRowButton.clicked.connect(handleAddRowButton)
-		addRowButton.show()
+        def viewStatMissingVals():
+                dialog          = QDialog()
+                gridLayout 	= QGridLayout()
+                colList         = QListWidget()
 
+                for i in range(len(dataframe.columns)):
+                        df_s = dataframe[dataframe.columns[i]]
+                        df_s_notnas = df_s.dropna()
+                        columnName = dataframe.columns[i]
+                        numMissing = len(df_s.index)-len(df_s_notnas.index)
+                        colList.addItem(columnName + " is missing " + str(numMissing) + " out of " + str(len(df_s.index)))
+                gridLayout.addWidget(colList,0,0)
+                dialog.setLayout(gridLayout)
+                dialog.exec_()
+                        
+                
 	# Set number of columns and rows
 	datatable.setColumnCount(len(dataframe.columns))
 	datatable.setRowCount(len(dataframe.index))
@@ -41,15 +73,32 @@ def __baseView(dataframe, editOnly_list=None, addRows_flag=False, nonEditableEna
 			datatable.setItem(i,j,QTableWidgetItem(str(dataframe.iget_value(i, j))))
 	gridLayout.addWidget(datatable,1,0)
 	
-	if addRows_flag:
-		gridLayout.addWidget(addRowButton,0,1)
-
 	# Add menu bar
         gridLayout.addWidget(menuBar,0,0)
         fileMenu = menuBar.addMenu('File')
+        editMenu = menuBar.addMenu('Edit')
+        statMenu = menuBar.addMenu('Statistics')
+        
         exitAction = QAction('Exit', window)
         exitAction.triggered.connect(exit)
         fileMenu.addAction(exitAction)
+
+        sortActionAsc = QAction('Sort Ascending', window)
+        sortActionAsc.triggered.connect(sortAscending)
+        fileMenu.addAction(sortActionAsc)
+
+        sortActionDesc = QAction('Sort Descending', window)
+        sortActionDesc.triggered.connect(sortDescending)
+        fileMenu.addAction(sortActionDesc)
+
+        missingVal = QAction('Missing Values', window)
+        missingVal.triggered.connect(viewStatMissingVals)
+        statMenu.addAction(missingVal)
+        
+        if addRows_flag:
+                addRow = QAction('Add Row', window)
+                addRow.triggered.connect(handleAddRowButton)
+                editMenu.addAction(addRow)
         
 	window.setCentralWidget(centralWidget)
 	centralWidget.setLayout(gridLayout)
@@ -91,12 +140,12 @@ def edit(dataframe, editOnly_list=None, addRows_flag=False):
 	datatable = __baseView(dataframe, editOnly_list, addRows_flag, nonEditableEnabled_flag=False)
 
 	# Create new dataframe to return
-	index = []
+	index = [];
 	for i in range(datatable.rowCount()):
 		index.append(i)
 
 	dfNew = DataFrame(index=index, columns=dataframe.columns)
-
+        
 	for i in range(datatable.rowCount()):
 		for j in range(datatable.columnCount()):
 			if not datatable.item(i,j):
