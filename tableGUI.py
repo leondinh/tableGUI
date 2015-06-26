@@ -140,7 +140,7 @@ def edit(dataframe, editOnly_list=None, addRows_flag=False):
 	datatable = __baseView(dataframe, editOnly_list, addRows_flag, nonEditableEnabled_flag=False)
 
 	# Create new dataframe to return
-	index = [];
+	index = []
 	for i in range(datatable.rowCount()):
 		index.append(i)
 
