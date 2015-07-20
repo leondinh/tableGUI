@@ -101,7 +101,8 @@ class DataFrameController(QDialog):
             self.containsValidData = False
 
     def closeEvent(self, evnt):
-        self.manager.removeId(self.idNum)
+        if (self.idNum != 1):
+            self.manager.removeId(self.idNum)
         self.signaler.closeWindow.emit()
         super(DataFrameController, self).closeEvent(evnt)
         
@@ -112,7 +113,7 @@ class EventManager():
     def setup(self, dataframe):
         self.model          = DataFrameModel(self, dataframe)
         self.initView       = DataFrameTableView(self.model)
-        self.initController = DataFrameController(self.generateId, self, self.initView)
+        self.initController = DataFrameController(self.generateId(), self, self.initView)
         self.controllers = []
         return True
 
@@ -127,11 +128,18 @@ class EventManager():
         controller.show()
 
     def removeId(self, idNum):
+        popNum = -1
+        success = False
         for i in range(len(self.controllers)):
             if (self.controllers[i].getId() == idNum):
                 popNum = i
-        self.controllers.pop(popNum)
-        
+                success = True
+
+        if success:
+            self.controllers.pop(popNum)
+        else:
+            error = QMessageBox.about(self.initController, 'Error', 'There was an issue closing the Statistics window.')
+
     def generateId(self):
         self.countId = self.countId + 1
         return self.countId 
