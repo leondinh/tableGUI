@@ -5,22 +5,29 @@ from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 
 # For testing purposes
-df = read_csv("test.csv",  na_values=["hello","world","blah"])
+df = read_csv("test.csv")
 
 class DataFrameController(QDialog):
-    def __init__(self, id, manager, view, parent=None):
+    def __init__(self, idNum, manager, view, parent=None):
         super(DataFrameController, self).__init__(parent)
-        self.id = id
+        self.idNum = idNum
         self.manager = manager
         self.view = view
 
         self.grid = QGridLayout()
         self.menu = QMenuBar()
+        self.signaler = Communicate()
         self.setLayout(self.grid)
-        self.grid.addWidget(self.menu)
+
+        self.containsValidData = True
+        
+        if not (isinstance(self.view, DataFrameStatView)):
+            self.grid.addWidget(self.menu)
+
         self.grid.addWidget(self.view)
 
         editMenu = self.menu.addMenu('Edit')
+        sortMenu = self.menu.addMenu('Sort')
         statMenu = self.menu.addMenu('Statistics')
 
         addRow = QAction('Add Row', self)
@@ -31,23 +38,73 @@ class DataFrameController(QDialog):
         deleteRow.triggered.connect(self.prepareDeleteRow)
         editMenu.addAction(deleteRow)
 
+        sortAscending = QAction('Sort Ascending', self)
+        sortAscending.triggered.connect(self.prepareAscendingSort)
+        sortMenu.addAction(sortAscending)
+
+        sortDescending = QAction('Sort Descending', self)
+        sortDescending.triggered.connect(self.prepareDescendingSort)
+        sortMenu.addAction(sortDescending)
+        
         missingVal = QAction('Missing Values', self)
         missingVal.triggered.connect(self.prepareStatWindow)
         statMenu.addAction(missingVal)
-
 
     def prepareAddRow(self):
         self.view.addRow()
 
     def prepareDeleteRow(self):
-        self.view.deleteRow()
+        text, ok = QInputDialog.getText(self, 'Input Dialog', 'Delete column:')      
+        if ok:
+            self.view.deleteRow(str(text))
+
+    def prepareAscendingSort(self):
+        columnName, boolVal = QInputDialog.getText(self.view, 'Sort', 'Column name:')
+        columnExists = False
         
+        if boolVal:
+            for i in range(self.view.columnCount()):
+                if (self.view.horizontalHeaderItem(i).text() == columnName):
+                    self.view.sortItems(i,0)
+                    columnExists = True
+
+        if not columnExists:
+            error = QMessageBox.about(self, 'Error', 'Column does not exist!')
+            
+        return
+                    
+    def prepareDescendingSort(self):
+        columnName, boolVal = QInputDialog.getText(self.view, 'Sort', 'Column name:')
+        columnExists = False
+        
+        if boolVal:
+            for i in range(self.view.columnCount()):
+                if (self.view.horizontalHeaderItem(i).text() == columnName):
+                    self.view.sortItems(i,1)
+                    columnExists = True
+
+        if not columnExists:
+            error = QMessageBox.about(self, 'Error', 'Column does not exist!')
+            
+        return
+    
     def prepareStatWindow(self):
         self.manager.createStatWindow(self.view)
         
     def getId(self):
-        return self.id
+        return self.idNum
+    
+    def isDirty(self):
+        if (self.containsValidData):
+            label = QLabel("<font color='orange'>Warning: Data is no longer valid (dirty).</font>")
+            self.grid.addWidget(label)
+            self.containsValidData = False
 
+    def closeEvent(self, evnt):
+        self.manager.removeId(self.idNum)
+        self.signaler.closeWindow.emit()
+        super(DataFrameController, self).closeEvent(evnt)
+        
 class EventManager():
     def __init__(self, dataframe):
         self.countId = 0
@@ -64,14 +121,21 @@ class EventManager():
 
     def createStatWindow(self, view):
         view = DataFrameStatView(self.model)
-        controller = DataFrameController(self.generateId, self, view)
+        controller = DataFrameController(self.generateId(), self, view)
+        self.model.signaler.updateStatWindows.connect(controller.isDirty)
         self.controllers.append(controller)
         controller.show()
+
+    def removeId(self, idNum):
+        for i in range(len(self.controllers)):
+            if (self.controllers[i].getId() == idNum):
+                popNum = i
+        self.controllers.pop(popNum)
         
     def generateId(self):
         self.countId = self.countId + 1
         return self.countId 
- 
+
 def explore(dataframe):
     app = QApplication(sys.argv)
     manager = EventManager(dataframe)
