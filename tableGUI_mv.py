@@ -109,7 +109,7 @@ class MyTableWidgetItem(QTableWidgetItem):
                 model = self.__view.model.getDataFrame()
 
                 if not self.column() == 0:
-                    dtype =  model.dtypes[model.index[self.column()]-1]
+                    dtype = model.dtypes[self.column()-1]
                 else:
                     return self.__value < other.__value
 
@@ -283,9 +283,11 @@ class DataFrameStatView(QListWidget):
             self.addItem(columnName + " is missing " + str(numMissing) + " out of " + str(len(df_s.index)))
             
 class DataFrameHistogramView(QDialog):
-    def __init__(self, data, parent=None):
+    def __init__(self, model, numBins, parent=None):
         super(DataFrameHistogramView, self).__init__(parent)
-        self.data = data
+        # set variables
+        self.model = model
+        self.numBins = numBins
         
         # a figure instance to plot on
         self.figure = plt.figure()
@@ -305,7 +307,6 @@ class DataFrameHistogramView(QDialog):
         layout = QVBoxLayout()
         layout.addWidget(self.toolbar)
         layout.addWidget(self.canvas)
-        #layout.addWidget(self.button)
         self.setLayout(layout)
         
     def plot(self):
@@ -316,7 +317,9 @@ class DataFrameHistogramView(QDialog):
         ax.hold(False)
 
         # plot data
-        ax.plot(self.data, '*-')
-
+        self.model.getDataFrame().hist(0, ax=(ax), bins=self.numBins)
+        ax.set_xlabel('Bins')
+        ax.set_ylabel('Frequency')
+        
         # refresh canvas
         self.canvas.draw()
