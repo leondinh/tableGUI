@@ -5,8 +5,13 @@ from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 import re
 
+from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt4agg import NavigationToolbar2QTAgg as NavigationToolbar
+import matplotlib.pyplot as plt
+
 class Communicate(QObject):
     updateStatWindows = pyqtSignal()
+    updateTableWindows = pyqtSignal()
     closeWindow = pyqtSignal()
     
 class DataFrameModel:
@@ -66,7 +71,15 @@ class DataFrameModel:
 
     def emitUpdateStatSignal(self):
         self.signaler.updateStatWindows.emit()
-    
+        self.signaler.updateTableWindows.emit()
+
+    def emitUpdateTableSignal(self):
+        #self.signaler.updateStatWindows.emit()
+        self.signaler.updateTableWindows.emit()
+
+    def emitCloseWindowSignal(self):
+        self.signaler.closeWindow.emit()
+        
     def isInt(self, s):
         try:
             int(s)
@@ -163,7 +176,7 @@ class DataFrameTableView(QTableWidget):
         row = self.currentRow()
         column = self.currentColumn()
         value = self.item(row, column)
-
+        oldValue = self.model.getDataFrame().iloc[row, column-1]
         self.model.setDataCell(row, column-1, value)
 
         value = self.model.getDataFrame().iloc[row,column-1]
@@ -175,12 +188,13 @@ class DataFrameTableView(QTableWidget):
                 self.item(row,column).changeValue(value)
         except TypeError:
             self.item(row,column).changeValue(value)
+ 
+        if (isnull(value) and notnull(oldValue)) or (notnull(value) and isnull(oldValue)):
+            self.model.emitUpdateStatSignal()
 
         if (shouldSort):
             self.sortItems(columnSortIndex, columnSortOrder)
 
-        self.model.emitUpdateStatSignal()
-        
         return True
 
     def addRow(self):
@@ -217,9 +231,13 @@ class DataFrameTableView(QTableWidget):
 
         if (shouldSort):
             self.sortItems(columnSortIndex, columnSortOrder)
-            
+
+        self.model.emitUpdateStatSignal()
+        
     def deleteRow(self, column):
         success = True
+        shouldEmitSignal = False
+        
         for i in range(self.rowCount()):
             if str(self.item(i,0).text()) == str(column):
                 savedValue = i
@@ -227,18 +245,23 @@ class DataFrameTableView(QTableWidget):
             self.removeRow(savedValue)
         except UnboundLocalError:
             success = False
-            error = QMessageBox.about(self, 'Error', 'Column does not exist!')
+            error = QMessageBox.about(self, 'Error', 'Row does not exist!')
 
         if (success): 
             try:
                 column = float(column)
                 self.model.getDataFrame().drop(float(column), inplace=True)
+                shouldEmitSignal = True
             except ValueError:
                 try:
                     self.model.getDataFrame().drop(column, inplace=True)
+                    shouldEmitSignal = True
                 except ValueError:
-                    error = QMessageBox.about(self, 'Error', 'Column does not exist!')
+                    error = QMessageBox.about(self, 'Error', 'Row does not exist!')
 
+        if shouldEmitSignal:
+            self.model.emitUpdateStatSignal()
+            
     def isFloat(self, s):
         try:
             float(s)
@@ -259,3 +282,41 @@ class DataFrameStatView(QListWidget):
             numMissing = len(df_s.index)-len(df_s_notnas.index)
             self.addItem(columnName + " is missing " + str(numMissing) + " out of " + str(len(df_s.index)))
             
+class DataFrameHistogramView(QDialog):
+    def __init__(self, data, parent=None):
+        super(DataFrameHistogramView, self).__init__(parent)
+        self.data = data
+        
+        # a figure instance to plot on
+        self.figure = plt.figure()
+
+        # this is the Canvas Widget that displays the `figure`
+        # it takes the `figure` instance as a parameter to __init__
+        self.canvas = FigureCanvas(self.figure)
+
+        # this is the Navigation widget
+        # it takes the Canvas widget and a parent
+        self.toolbar = NavigationToolbar(self.canvas, self)
+
+        # Plot
+        self.plot()
+
+        # set the layout
+        layout = QVBoxLayout()
+        layout.addWidget(self.toolbar)
+        layout.addWidget(self.canvas)
+        #layout.addWidget(self.button)
+        self.setLayout(layout)
+        
+    def plot(self):
+        # create an axis
+        ax = self.figure.add_subplot(111)
+
+        # discards the old graph
+        ax.hold(False)
+
+        # plot data
+        ax.plot(self.data, '*-')
+
+        # refresh canvas
+        self.canvas.draw()
