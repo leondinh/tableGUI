@@ -7,8 +7,8 @@ from pandasql import *
 from matplotlib import *
 
 # For testing purposes
-# df = read_csv("test.csv")
 df = read_csv("test.csv")
+
 class EditCellDialog(QDialog):
     def __init__(self, view):
         super(QDialog, self).__init__()
@@ -29,8 +29,8 @@ class EditCellDialog(QDialog):
         self.form.addRow(labelValue, self.value)
         self.form.addWidget(self.buttonBox)
 
-        #self.buttonBox.button(QDialogButtonBox.Ok).clicked.connect(self.accepted)
-        #self.buttonBox.button(QDialogButtonBox.Cancel).clicked.connect(self.rejected)
+        self.buttonBox.button(QDialogButtonBox.Ok).clicked.connect(self.accepted)
+        self.buttonBox.button(QDialogButtonBox.Cancel).clicked.connect(self.rejected)
         
     def accepted(self):
         # try to convert to bool, int, floats, or object based on value
@@ -45,11 +45,64 @@ class EditCellDialog(QDialog):
                 columnIndex = i
 
         for i in range (0, self.view.rowCount()):
-            print str(self.view.item(i, 0).text())
             if rowName == str(self.view.item(i, 0).text()):
                 rowIndex = i
-                
+
+
+        if columnIndex == -1 or rowIndex == -1:
+            error = QMessageBox.about(self, 'Error', 'Enter valid row and column names!')
+            
         self.view.setItem(rowIndex, columnIndex, MyTableWidgetItem(str(self.value.text()), self.view))
+        model = self.view.model
+        model.setDataCell(rowIndex, columnIndex-1, self.value)
+        self.close()
+        
+    def rejected(self):
+        self.close()
+
+class CreateHistogramDialog(QDialog):
+    def __init__(self, view, manager):
+        super(QDialog, self).__init__()
+
+        self.view = view
+        self.manager = manager
+        self.columnName = QLineEdit(self)
+        self.numBins = QLineEdit(self)
+        self.buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.form = QFormLayout(self)
+    
+        labelColumnName = QLabel('column name:', self)
+        labelNumBins = QLabel('number of bins:', self)
+    
+        self.form.addRow(labelColumnName, self.columnName)
+        self.form.addRow(labelNumBins, self.numBins)
+        self.form.addWidget(self.buttonBox)
+
+        self.buttonBox.button(QDialogButtonBox.Ok).clicked.connect(self.accepted)
+        self.buttonBox.button(QDialogButtonBox.Cancel).clicked.connect(self.rejected)
+        
+    def accepted(self):
+        # Get column name + number of bins
+        columnName = str(self.columnName.text())
+        try:
+            numBins = int(self.numBins.text())
+        except ValueError:
+            error = QMessageBox.about(self, 'Error', 'Bin value must be an integer less than or equal to column length.')
+            self.close()
+            return
+        
+        columnExists = False
+        for i in range(self.view.columnCount()):
+            if (self.view.horizontalHeaderItem(i).text() == columnName) and (str(columnName) != ""):
+                columnExists = True
+                
+        if not columnExists:
+            error = QMessageBox.about(self, 'Error', 'Column does not exist!')
+        else:
+            try:
+                self.manager.createHistogramWindow(self.view, columnName, numBins)
+            except ValueError:
+                error = QMessageBox.about(self, 'Error', 'More than 1 data point needed!')
         self.close()
 
     def rejected(self):
@@ -114,6 +167,10 @@ class DataFrameController(QDialog):
         sqlQuery.triggered.connect(self.prepareSqlQueryWindow)
         queryMenu.addAction(sqlQuery)
 
+        keywordSearch = QAction('Keyword Search', self)
+        keywordSearch.triggered.connect(self.prepareKeywordSearchWindow)
+        queryMenu.addAction(keywordSearch)
+
     def prepareEditCell(self):
         window = EditCellDialog(self.view)
         window.show()
@@ -165,21 +222,9 @@ class DataFrameController(QDialog):
         self.manager.createStatWindow(self.view)
 
     def prepareHistogram(self):
-        #Get column name + Obtain data set
-        columnName, boolVal = QInputDialog.getText(self.view, 'Histogram', 'Column name:')
-        columnExists = False
-        
-        if boolVal:
-            for i in range(self.view.columnCount()):
-                if (self.view.horizontalHeaderItem(i).text() == columnName) and (str(columnName) != ""):
-                    columnExists = True
-
-           
-        if not columnExists:
-            error = QMessageBox.about(self, 'Error', 'Column does not exist!')
-        else:
-            # Build histogram from data set
-            self.manager.createHistogramWindow(self.view, columnName)
+        window = CreateHistogramDialog(self.view, self.manager)
+        window.show()
+        window.exec_()
         
     def prepareSqlQueryWindow(self):
         text, ok = QInputDialog.getText(self, 'Input Dialog', 'SQL Query:')
@@ -187,10 +232,33 @@ class DataFrameController(QDialog):
             try:
                 current = self.view.model.getDataFrame()
                 dataframe = sqldf(str(text).lower(), locals())
-                self.manager.createTableWindow(dataframe, text, self.view)
+                self.manager.createTableWindow(dataframe, "SQL Query: " + text, self.view)
             except Exception:
                 error = QMessageBox.about(self, 'Error', 'Query was invalid. Another window will not open.')
-        
+
+    def prepareKeywordSearchWindow(self):
+        # text is keyword
+        text, ok = QInputDialog.getText(self, 'Input Dialog', 'Keyword Search:')
+        if ok:
+            keyword = text
+
+            # iterate through rows, look for regex match with keyword
+            dataframe = self.view.model.getDataFrame()
+            rowFrames = []
+            
+            for i in range(len(dataframe)): # for each row
+                match = False
+                for j in range(len(dataframe.columns)): # for each column
+                    if str(keyword) in str(dataframe.iloc[i,j]):
+                        match = True
+                if match:
+                    rowFrames.append(df[i:i+1])
+            try:
+                newDataframe = concat(rowFrames)
+                self.manager.createTableWindow(newDataframe, "Keyword Search: " + text, self.view)
+            except ValueError:
+                error = QMessageBox.about(self, 'Error', 'No matches. Another window will not open.')
+   
     def getId(self):
         return self.idNum
     
@@ -204,10 +272,11 @@ class DataFrameController(QDialog):
     def closeEvent(self, evnt):
         if (self.idNum != 1):
             self.manager.removeId(self.idNum)
-            self.view.model.emitCloseWindowSignal()
+            if isinstance(self.view, DataFrameHistogramView):
+                self.view.model.emitCloseWindowSignal()
             super(DataFrameController, self).closeEvent(evnt)
         else:
-            if flag_nested:
+            if flag_cascade:
                 QCoreApplication.instance().quit()
         
 class EventManager():
@@ -228,9 +297,8 @@ class EventManager():
     def createTableWindow(self, dataframe, title, callerView):
         view = DataFrameTableView(DataFrameModel(self, dataframe))
         controller = DataFrameController(self.generateId(), self, view)
-        #callerView.model.signaler.updateTableWindows.connect(controller.isDirty)
         self.controllers.append(controller)
-        controller.setWindowTitle("Query: " + title)
+        controller.setWindowTitle(title)
         controller.show()
             
     def createStatWindow(self, view):
@@ -241,12 +309,38 @@ class EventManager():
         controller.setWindowTitle("Statistics: Missing Values")
         controller.show()
 
-    def createHistogramWindow(self, view, columnName):
-        model = view.model.getDataFrame()
-        data = model[str(columnName)]
-        view = DataFrameHistogramView(data)
+    def createHistogramWindow(self, view, columnName, numBins):
+        # project out the column wanted, cast to dataframe
+        dataframeOfView = view.model.getDataFrame()
+
+        if len(dataframeOfView[str(columnName)]) < numBins or numBins <= 0:
+            error = QMessageBox.about(self.initController, 'Error', 'Bin value must be an integer less than or equal to column length.')
+            return
+
+        # passed if column is composed of ints or floats
+        if (str(dataframeOfView[columnName].dtype) != 'object'):
+            dataframeToPass = DataFrame(dataframeOfView[str(columnName)])
+        else:
+            wordLengths = []
+            for i in range(len(dataframeOfView[columnName])):         
+                if str(dataframeOfView[columnName][i]).lower() == 'nan':
+                    wordLengths.append(0)
+                else:
+                    wordLengths.append(len(dataframeOfView[columnName][i]))
+            dataframeToPass = DataFrame(wordLengths)
+            dataframeToPass.columns = [columnName + " (length of string)"]
+                          
+        # create model for view
+        model = DataFrameModel(self, dataframeToPass)
+
+        # create view
+        view = DataFrameHistogramView(model, numBins)
+
+        # create controller
         controller = DataFrameController(self.generateId(), self, view)
         self.controllers.append(controller)
+
+        # display results
         controller.setWindowTitle("Histogram: " + str(columnName))
         controller.show()
         
@@ -267,11 +361,11 @@ class EventManager():
         self.countId = self.countId + 1
         return self.countId 
 
-def explore(dataframe, nested=True, inPlace=True):
-    global flag_nested
-    flag_nested = nested
+def explore(dataframe, inPlace=False, cascade=False):
+    global flag_cascade
+    flag_cascade = cascade
     dataframePassed = None
-    DataFrame.hist(dataframe)
+    
     if inPlace:
         dataframePassed = dataframe
     else:
