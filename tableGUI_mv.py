@@ -8,7 +8,7 @@ import re
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QTAgg as NavigationToolbar
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MultipleLocator
+import matplotlib.ticker as mtick
 
 class Communicate(QObject):
     """Contains signals which can be emitted.
@@ -524,7 +524,7 @@ class DataFrameStatView(QListWidget):
             numMissing = len(df_s.index)-len(df_s_notnas.index)
             self.addItem(columnName + " is missing " + str(numMissing) + " out of " + str(len(df_s.index)))
             self.columnNames.append(columnName)
-            self.numMissingList.append(float(numMissing)/len(df_s.index))
+            self.numMissingList.append(float(numMissing*100)/len(df_s.index))
             
 class DataFrameHistogramView(QDialog):
     """View a histogram about a particular dataframe column.
@@ -594,15 +594,32 @@ class DataFrameHistogramView(QDialog):
             ax.set_xlabel('Bins')
             ax.set_ylabel('Frequency')
         else:
-            ax.plot(self.model.getDataFrame())
+            N = len(self.model.getDataFrame().index) # number of columns
+            ind = np.arange(N)
+            width = 0.8 # width of each bar
+            heights = self.model.getDataFrame().ix[:,0]
 
-            #labels = self.model.getDataFrame().index
-            #ax.set_xticklabels(labels)
+            # create bar chart
+            ax.bar(ind, heights, width)
+
+            # store name of each column in array
+            labels = self.model.getDataFrame().index
+
+            # format x axis
+            ax.set_xticks(ind+width - width/2)
+            ax.set_xticklabels(labels)
+            ax.set_xlabel('Column Name')
+
+            # format y axis
+            fmt = '%s%%'
+            yticks = mtick.FormatStrFormatter(fmt)
             
-            ax.xaxis.set_major_locator(MultipleLocator(1))
-            
-            ax.set_xlabel('Column Index')
+            ax.set_ylim([0,100])
+            ax.yaxis.set_major_formatter(yticks)
             ax.set_ylabel('Percentage of Values Missing in Each Column')
-        
+
+            # add title
+            ax.set_title('Missing Values')
+            
         # refresh canvas
         self.canvas.draw()
