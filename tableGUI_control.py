@@ -547,7 +547,9 @@ class DataFrameController(QDialog):
             # Close all windows if user is closing main application window
             # and cascade is set to True.
             if flag_cascade:
-                QCoreApplication.instance().quit()
+                QCoreApplication.instance().closeAllWindows()
+            else:
+                super(DataFrameController, self).closeEvent(evnt)
         
 class EventManager():
     """Keeps creates and tracks the number of windows.
@@ -714,7 +716,7 @@ class EventManager():
         view.model.signaler.updateStatWindows.connect(controller.isDirty)
 
         # display results
-        controller.setWindowTitle("Graph of Statistics View")
+        controller.setWindowTitle("Visualize: Missing Values Bar Chart")
         controller.show()
         
     def removeId(self, idNum):
