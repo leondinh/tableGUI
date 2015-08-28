@@ -6,9 +6,6 @@ from PyQt4.QtCore import *
 from pandasql import *
 from matplotlib import *
 
-# For testing purposes
-df = read_csv("test.csv")
-
 class EditCellDialog(QDialog):
     """Prompts user for row, column names and value to be
         inserted into table cell.
@@ -480,7 +477,7 @@ class DataFrameController(QDialog):
                     if str(keyword) in str(dataframe.iloc[i,j]):
                         match = True
                 if match:
-                    rowFrames.append(df[i:i+1])
+                    rowFrames.append(dataframe[i:i+1])
             try:
                 newDataframe = concat(rowFrames)
                 self.manager.createTableWindow(newDataframe, "Keyword Search: " + text, self.view)
